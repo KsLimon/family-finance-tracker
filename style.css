@@ -1055,9 +1055,11 @@ body {
 .fab:hover  { transform: translateX(-50%) scale(1.08); box-shadow: 0 6px 28px rgba(79,70,229,0.6); }
 .fab:active { transform: translateX(-50%) scale(0.95); }
 
-/* ============================================================
-   MOBILE OVERRIDES  ≤ 768px
-   ============================================================ */
+/* Touch devices can't hover — always show delete buttons */
+@media (hover: none) {
+    .txn-del  { display: inline; }
+    .cat-del  { display: inline; }
+}
 @media (max-width: 768px) {
     /* Bottom nav + FAB visible */
     .bottom-nav { display: flex; }
