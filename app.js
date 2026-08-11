@@ -49,6 +49,14 @@ let firestoreUnsubscribeMonth = null;
 let pendingSaveTimer          = null;
 
 /* ============================================================
+   HOUSEHOLD STATE
+   ============================================================ */
+let currentHouseholdId   = null;
+let currentHouseholdData = null;
+let userHouseholds       = [];
+let eventsRegistered     = false;
+
+/* ============================================================
    PERSISTENCE
    ============================================================ */
 function saveState() {
@@ -172,7 +180,7 @@ let currentSection = 'dashboard';
 function navigate(section) {
     currentSection = section;
 
-    document.querySelectorAll('.nav-item').forEach(el => {
+    document.querySelectorAll('.nav-item, .bnav-item').forEach(el => {
         el.classList.toggle('active', el.dataset.section === section);
     });
     document.querySelectorAll('.page').forEach(el => {
@@ -383,6 +391,16 @@ function renderBudget() {
     const total = md.categories.reduce((s, c) => s + c.budget, 0);
     document.getElementById('totalBudgetInfo').textContent = `Total budgeted: ${fmtMoney(total)}`;
 
+    /* Show carry button only when a previous month with categories exists */
+    const prevMonth = Object.keys(state.data).sort().filter(m => m < state.activeMonth).pop();
+    const carryBtn  = document.getElementById('carryFromPrevBtn');
+    if (prevMonth && state.data[prevMonth]?.categories?.length) {
+        document.getElementById('carryFromLabel').textContent = monthLabel(prevMonth);
+        carryBtn.classList.remove('hidden');
+    } else {
+        carryBtn.classList.add('hidden');
+    }
+
     const grid     = document.getElementById('catGrid');
     const emptyEl  = document.getElementById('catEmpty');
 
@@ -429,6 +447,24 @@ function renderBudget() {
             }
         });
     });
+}
+
+function carryFromPrevMonth() {
+    const months = Object.keys(state.data).sort();
+    const prevMonth = months.filter(m => m < state.activeMonth).pop();
+    if (!prevMonth) { toast('No previous month data found', 'error'); return; }
+
+    const prev = state.data[prevMonth];
+    if (!prev.categories || prev.categories.length === 0) { toast('Previous month has no categories', 'error'); return; }
+
+    const md = getMonthData(state.activeMonth);
+    if (md.categories.length > 0 &&
+        !confirm(`Replace current categories with those from ${monthLabel(prevMonth)}?`)) return;
+
+    md.categories = JSON.parse(JSON.stringify(prev.categories));
+    saveState();
+    toast(`Categories carried from ${monthLabel(prevMonth)}`);
+    renderBudget();
 }
 
 function saveCategoryBudget(id, budget) {
@@ -705,11 +741,11 @@ function initFirebase() {
    FIREBASE – FIRESTORE READ / WRITE
    ============================================================ */
 function monthDocRef(month) {
-    return db.collection('budgets').doc(currentUser.uid).collection('months').doc(month);
+    return db.collection('households').doc(currentHouseholdId).collection('months').doc(month);
 }
 
 async function saveToFirestore(month) {
-    if (!db || !currentUser || !state.data[month]) return;
+    if (!db || !currentUser || !currentHouseholdId || !state.data[month]) return;
     try { await monthDocRef(month).set(state.data[month]); }
     catch (e) { console.error('Firestore write error:', e); }
 }
@@ -720,9 +756,9 @@ function queueFirestoreSave(month) {
 }
 
 async function loadAllFromFirestore() {
-    if (!db || !currentUser) return false;
+    if (!db || !currentUser || !currentHouseholdId) return false;
     try {
-        const snap = await db.collection('budgets').doc(currentUser.uid)
+        const snap = await db.collection('households').doc(currentHouseholdId)
             .collection('months').get();
         state.data = {};
         snap.forEach(doc => { state.data[doc.id] = doc.data(); });
@@ -737,7 +773,7 @@ async function loadAllFromFirestore() {
 function subscribeToActiveMonth() {
     if (firestoreUnsubscribeMonth) firestoreUnsubscribeMonth();
     firestoreUnsubscribeMonth = null;
-    if (!db || !currentUser) return;
+    if (!db || !currentUser || !currentHouseholdId) return;
     firestoreUnsubscribeMonth = monthDocRef(state.activeMonth).onSnapshot(doc => {
         if (!doc.exists) return;
         const remote = doc.data();
@@ -752,6 +788,176 @@ function subscribeToActiveMonth() {
 }
 
 /* ============================================================
+   HOUSEHOLD – FIREBASE FUNCTIONS
+   ============================================================ */
+function generateInviteCode() {
+    const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => c[Math.floor(Math.random() * c.length)]).join('');
+}
+
+async function createHousehold(name) {
+    const code  = generateInviteCode();
+    const hhRef = db.collection('households').doc();
+    const batch = db.batch();
+    batch.set(hhRef, {
+        name, inviteCode: code, createdBy: currentUser.uid,
+        members: [currentUser.uid],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('users').doc(currentUser.uid), {
+        households:        firebase.firestore.FieldValue.arrayUnion(hhRef.id),
+        activeHouseholdId: hhRef.id,
+    }, { merge: true });
+    await batch.commit();
+    const hh = { id: hhRef.id, name, inviteCode: code, members: [currentUser.uid], createdBy: currentUser.uid };
+    currentHouseholdId   = hhRef.id;
+    currentHouseholdData = hh;
+    userHouseholds = [...userHouseholds.filter(h => h.id !== hhRef.id), hh];
+    return hhRef.id;
+}
+
+async function joinHousehold(code) {
+    const snap = await db.collection('households')
+        .where('inviteCode', '==', code.toUpperCase().trim()).limit(1).get();
+    if (snap.empty) throw new Error('No household found with that code.');
+    const hhDoc = snap.docs[0];
+    if (hhDoc.data().members.includes(currentUser.uid))
+        throw new Error('You are already a member of this household.');
+    const batch = db.batch();
+    batch.update(hhDoc.ref, { members: firebase.firestore.FieldValue.arrayUnion(currentUser.uid) });
+    batch.set(db.collection('users').doc(currentUser.uid), {
+        households:        firebase.firestore.FieldValue.arrayUnion(hhDoc.id),
+        activeHouseholdId: hhDoc.id,
+    }, { merge: true });
+    await batch.commit();
+    const hh = { id: hhDoc.id, ...hhDoc.data(), members: [...hhDoc.data().members, currentUser.uid] };
+    currentHouseholdId   = hhDoc.id;
+    currentHouseholdData = hh;
+    userHouseholds = [...userHouseholds.filter(h => h.id !== hhDoc.id), hh];
+    return hhDoc.id;
+}
+
+async function loadUserHouseholds() {
+    try {
+        const uDoc = await db.collection('users').doc(currentUser.uid).get();
+        if (!uDoc.exists) { userHouseholds = []; return []; }
+        const ids = uDoc.data().households || [];
+        const results = [];
+        for (const id of ids) {
+            const hDoc = await db.collection('households').doc(id).get();
+            if (hDoc.exists && hDoc.data().members.includes(currentUser.uid))
+                results.push({ id, ...hDoc.data() });
+        }
+        userHouseholds = results;
+        return results;
+    } catch (_) { userHouseholds = []; return []; }
+}
+
+async function switchHousehold(id) {
+    if (id === currentHouseholdId) { hideHouseholdPanel(); return; }
+    await db.collection('users').doc(currentUser.uid).set({ activeHouseholdId: id }, { merge: true });
+    currentHouseholdId   = id;
+    currentHouseholdData = userHouseholds.find(h => h.id === id) || null;
+    state.data = {};
+    hideHouseholdPanel();
+    showLoading();
+    await loadAllFromFirestore();
+    hideLoading();
+    updateHouseholdUI();
+    subscribeToActiveMonth();
+    navigate(currentSection);
+}
+
+async function leaveHousehold(id) {
+    const hh = userHouseholds.find(h => h.id === id);
+    if (!confirm(`Leave "${hh?.name || 'this household'}"?\nYou will need the invite code to re-join.`)) return;
+    const batch = db.batch();
+    batch.update(db.collection('households').doc(id), {
+        members: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
+    });
+    batch.update(db.collection('users').doc(currentUser.uid), {
+        households: firebase.firestore.FieldValue.arrayRemove(id),
+    });
+    await batch.commit();
+    userHouseholds = userHouseholds.filter(h => h.id !== id);
+    if (currentHouseholdId === id) {
+        currentHouseholdId   = null;
+        currentHouseholdData = null;
+        state.data           = {};
+        if (userHouseholds.length > 0) { await switchHousehold(userHouseholds[0].id); }
+        else { hideHouseholdPanel(); updateHouseholdUI(); showHouseholdSetup(); }
+    } else {
+        renderHouseholdList();
+    }
+}
+
+/* ============================================================
+   HOUSEHOLD – UI
+   ============================================================ */
+function showHouseholdSetup() { document.getElementById('householdOverlay').classList.remove('hidden'); }
+function hideHouseholdSetup() { document.getElementById('householdOverlay').classList.add('hidden'); }
+function showHouseholdPanel() { renderHouseholdList(); document.getElementById('hhPanelOverlay').classList.remove('hidden'); }
+function hideHouseholdPanel() { document.getElementById('hhPanelOverlay').classList.add('hidden'); }
+
+function updateHouseholdUI() {
+    const box = document.getElementById('hhBox');
+    if (!currentHouseholdData || !db) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    document.getElementById('hhName').textContent        = currentHouseholdData.name || 'My Household';
+    document.getElementById('hhCode').textContent        = currentHouseholdData.inviteCode || '——';
+    document.getElementById('hhMemberCount').textContent =
+        `${(currentHouseholdData.members || []).length} member${(currentHouseholdData.members || []).length !== 1 ? 's' : ''}`;
+}
+
+function renderHouseholdList() {
+    const list = document.getElementById('hhList');
+    if (!userHouseholds.length) {
+        list.innerHTML = '<p class="text-muted" style="padding:12px 0">You have no households yet.</p>';
+        return;
+    }
+    list.innerHTML = userHouseholds.map(h => `
+        <div class="hh-item ${h.id === currentHouseholdId ? 'active' : ''}">
+            <div class="hh-item-info">
+                <div class="hh-item-name">${escHtml(h.name)}</div>
+                <div class="hh-item-meta">${(h.members || []).length} members · Code: <code>${h.inviteCode}</code></div>
+            </div>
+            <div class="hh-item-actions">
+                ${h.id !== currentHouseholdId
+                    ? `<button class="btn-primary hh-switch-btn" data-id="${h.id}">Switch</button>`
+                    : '<span class="hh-active-label">✓ Active</span>'}
+                <button class="hh-leave-btn" data-id="${h.id}">Leave</button>
+            </div>
+        </div>`).join('');
+    list.querySelectorAll('.hh-switch-btn').forEach(btn =>
+        btn.addEventListener('click', () => switchHousehold(btn.dataset.id)));
+    list.querySelectorAll('.hh-leave-btn').forEach(btn =>
+        btn.addEventListener('click', () => leaveHousehold(btn.dataset.id)));
+}
+
+function setHhError(msg) {
+    const el = document.getElementById('hhError');
+    el.textContent = msg;
+    el.classList.toggle('hidden', !msg);
+}
+function setHhPanelError(msg) {
+    const el = document.getElementById('hhPanelError');
+    el.textContent = msg;
+    el.classList.toggle('hidden', !msg);
+}
+
+async function finishAppStart() {
+    showLoading();
+    try {
+        const loaded = await loadAllFromFirestore();
+        if (!loaded) loadState();
+    } catch (_) { loadState(); }
+    hideLoading();
+    updateHouseholdUI();
+    subscribeToActiveMonth();
+    setupApp();
+}
+
+/* ============================================================
    FIREBASE – AUTH
    ============================================================ */
 function showAuth()    { document.getElementById('authOverlay').classList.remove('hidden'); }
@@ -762,10 +968,15 @@ function hideLoading() { document.getElementById('loadingOverlay').classList.add
 function updateUserUI(user) {
     const ui = document.getElementById('userInfo');
     ui.classList.remove('hidden');
-    const av = document.getElementById('userAvatar');
-    av.src = user.photoURL || '';
-    av.style.display = user.photoURL ? '' : 'none';
-    document.getElementById('userName').textContent = user.displayName || user.email;
+    const av       = document.getElementById('userAvatar');
+    const fallback = document.getElementById('avatarFallback');
+    av.src         = user.photoURL || '';
+    av.style.display      = user.photoURL ? '' : 'none';
+    fallback.textContent  = (user.displayName || user.email || '?')[0].toUpperCase();
+    fallback.style.display = user.photoURL ? 'none' : 'flex';
+    const name = user.displayName || user.email;
+    document.getElementById('userName').textContent     = name;
+    document.getElementById('avatarDropName').textContent = name;
 }
 function clearUserUI() { document.getElementById('userInfo').classList.add('hidden'); }
 
@@ -810,7 +1021,6 @@ function setAuthError(msg) {
 
 async function setupAuthListener() {
     if (!auth) {
-        // Firebase not configured — use localStorage and open the app directly
         loadState();
         setupApp();
         return;
@@ -826,13 +1036,30 @@ async function setupAuthListener() {
             hideAuth();
             updateUserUI(user);
             showLoading();
-            const loaded = await loadAllFromFirestore();
-            if (!loaded) loadState(); // fallback to cached localStorage data
+            await loadUserHouseholds();
+            let activeId = null;
+            try {
+                const uDoc = await db.collection('users').doc(user.uid).get();
+                if (uDoc.exists) activeId = uDoc.data().activeHouseholdId;
+            } catch (_) {}
+            if (activeId && userHouseholds.find(h => h.id === activeId)) {
+                currentHouseholdId   = activeId;
+                currentHouseholdData = userHouseholds.find(h => h.id === activeId);
+            } else if (userHouseholds.length > 0) {
+                currentHouseholdId   = userHouseholds[0].id;
+                currentHouseholdData = userHouseholds[0];
+            }
             hideLoading();
-            subscribeToActiveMonth();
-            setupApp();
+            if (!currentHouseholdId) {
+                setupApp();
+                showHouseholdSetup();
+            } else {
+                await finishAppStart();
+            }
         } else {
-            currentUser = null;
+            currentUser          = null;
+            currentHouseholdId   = null;
+            currentHouseholdData = null;
             clearUserUI();
             if (firestoreUnsubscribeMonth) { firestoreUnsubscribeMonth(); firestoreUnsubscribeMonth = null; }
             showAuth();
@@ -845,6 +1072,13 @@ async function setupAuthListener() {
    Firebase is not configured)
    ============================================================ */
 function setupApp() {
+    /* Guard: only register DOM event listeners once across sign-in cycles */
+    if (eventsRegistered) {
+        if (currentHouseholdId || !auth) navigate('dashboard');
+        return;
+    }
+    eventsRegistered = true;
+
     /* -- Month picker -- */
     const monthPicker = document.getElementById('activeMonth');
     monthPicker.value = state.activeMonth;
@@ -874,6 +1108,24 @@ function setupApp() {
 
     /* -- Quick Add Transaction button (topbar) -- */
     document.getElementById('quickAddBtn').addEventListener('click', () => navigate('transactions'));
+    document.getElementById('carryFromPrevBtn').addEventListener('click', carryFromPrevMonth);
+
+    /* -- Avatar dropdown -- */
+    const avatarBtn      = document.getElementById('avatarBtn');
+    const avatarDropdown = document.getElementById('avatarDropdown');
+    avatarBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        avatarDropdown.classList.toggle('hidden');
+    });
+    document.addEventListener('click', () => avatarDropdown.classList.add('hidden'));
+
+    /* -- Bottom nav (mobile) -- */
+    document.querySelectorAll('.bnav-item').forEach(btn => {
+        btn.addEventListener('click', () => navigate(btn.dataset.section));
+    });
+
+    /* -- FAB (mobile) -- */
+    document.getElementById('fabAddBtn').addEventListener('click', () => navigate('transactions'));
 
     /* ===== BUDGET SETUP EVENTS ===== */
 
@@ -963,7 +1215,7 @@ function setupApp() {
     document.getElementById('filterCat').addEventListener('change',  applyFilters);
 
     /* ===== INITIAL RENDER ===== */
-    navigate('dashboard');
+    if (currentHouseholdId || !auth) navigate('dashboard');
 }
 
 /* ============================================================
@@ -976,24 +1228,68 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('googleSignInBtn').addEventListener('click', signInWithGoogle);
     document.getElementById('signOutBtn').addEventListener('click', () => auth && auth.signOut());
 
-    let authMode = 'signin';
-    document.querySelectorAll('.auth-tab').forEach(tab => {
+    /* -- Household setup overlay events -- */
+    let hhSetupTab = 'create';
+    document.querySelectorAll('[data-hhtab]').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('[data-hhtab]').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            authMode = tab.dataset.tab;
-            document.getElementById('emailAuthBtn').textContent =
-                authMode === 'register' ? 'Create Account' : 'Sign In';
-            setAuthError('');
+            hhSetupTab = tab.dataset.hhtab;
+            document.getElementById('hhCreateForm').classList.toggle('hidden', hhSetupTab !== 'create');
+            document.getElementById('hhJoinForm').classList.toggle('hidden', hhSetupTab !== 'join');
+            setHhError('');
         });
     });
+    document.getElementById('hhCreateBtn').addEventListener('click', async () => {
+        const name = document.getElementById('hhNewName').value.trim();
+        if (!name) { setHhError('Enter a household name.'); return; }
+        const btn = document.getElementById('hhCreateBtn');
+        btn.disabled = true;
+        try   { await createHousehold(name); hideHouseholdSetup(); await finishAppStart(); }
+        catch (e) { setHhError(e.message); }
+        finally   { btn.disabled = false; }
+    });
+    document.getElementById('hhJoinBtn').addEventListener('click', async () => {
+        const code = document.getElementById('hhJoinCode').value.trim();
+        if (!code) { setHhError('Enter an invite code.'); return; }
+        const btn = document.getElementById('hhJoinBtn');
+        btn.disabled = true;
+        try   { await joinHousehold(code); hideHouseholdSetup(); await finishAppStart(); }
+        catch (e) { setHhError(e.message); }
+        finally   { btn.disabled = false; }
+    });
+    document.getElementById('hhNewName').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('hhCreateBtn').click(); });
+    document.getElementById('hhJoinCode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('hhJoinBtn').click(); });
 
-    document.getElementById('emailAuthForm').addEventListener('submit', e => {
-        e.preventDefault();
-        const email    = document.getElementById('authEmail').value.trim();
-        const password = document.getElementById('authPassword').value;
-        if (!email || !password) { setAuthError('Please fill in email and password.'); return; }
-        signInWithEmail(email, password, authMode === 'register');
+    /* -- Household manager panel events -- */
+    document.getElementById('hhManageBtn').addEventListener('click', showHouseholdPanel);
+    document.getElementById('hhPanelClose').addEventListener('click', hideHouseholdPanel);
+    document.getElementById('hhPanelOverlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('hhPanelOverlay')) hideHouseholdPanel();
+    });
+    document.getElementById('hhCreateInlineBtn').addEventListener('click', async () => {
+        const name = document.getElementById('hhNewNameInline').value.trim();
+        if (!name) { setHhPanelError('Enter a household name.'); return; }
+        try {
+            await createHousehold(name);
+            document.getElementById('hhNewNameInline').value = '';
+            await switchHousehold(currentHouseholdId);
+            toast(`Household "${name}" created!`);
+        } catch (e) { setHhPanelError(e.message); }
+    });
+    document.getElementById('hhJoinInlineBtn').addEventListener('click', async () => {
+        const code = document.getElementById('hhJoinCodeInline').value.trim();
+        if (!code) { setHhPanelError('Enter an invite code.'); return; }
+        try {
+            await joinHousehold(code);
+            document.getElementById('hhJoinCodeInline').value = '';
+            await switchHousehold(currentHouseholdId);
+            toast('Joined household!');
+        } catch (e) { setHhPanelError(e.message); }
+    });
+    document.getElementById('hhCopyBtn').addEventListener('click', () => {
+        const code = document.getElementById('hhCode').textContent;
+        if (code && code !== '——') navigator.clipboard.writeText(code).then(() => toast('Invite code copied!'));
     });
 
     setupAuthListener();

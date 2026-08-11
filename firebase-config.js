@@ -19,9 +19,25 @@
  *    rules_version = '2';
  *    service cloud.firestore {
  *      match /databases/{database}/documents {
- *        match /budgets/{userId}/months/{month} {
+ *
+ *        // Each user's profile (stores their household list)
+ *        match /users/{userId} {
  *          allow read, write: if request.auth != null
  *                             && request.auth.uid == userId;
+ *        }
+ *
+ *        // Household budget data — any member can read/write
+ *        match /households/{householdId} {
+ *          allow read, update: if request.auth != null
+ *                              && request.auth.uid in resource.data.members;
+ *          allow create: if request.auth != null;
+ *
+ *          match /months/{month} {
+ *            allow read, write: if request.auth != null
+ *              && request.auth.uid in
+ *                 get(/databases/$(database)/documents/households/$(householdId))
+ *                   .data.members;
+ *          }
  *        }
  *      }
  *    }

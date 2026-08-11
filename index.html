@@ -19,7 +19,9 @@
     <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-            <div class="brand-logo">🏠</div>
+            <div class="brand-logo">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
             <div>
                 <div class="brand-name">HouseBudget</div>
                 <div class="brand-tagline">Family Finance Tracker</div>
@@ -29,6 +31,23 @@
         <div class="month-box">
             <div class="month-box-label">📅 Active Month</div>
             <input type="month" id="activeMonth" class="month-picker">
+        </div>
+
+        <!-- Household indicator (hidden when Firebase not configured) -->
+        <div class="hh-box hidden" id="hhBox">
+            <div class="hh-box-label">Household</div>
+            <div class="hh-name" id="hhName">—</div>
+            <div class="hh-meta-row">
+                <span class="hh-meta-text">Invite code: <code id="hhCode">——</code></span>
+                <button class="hh-icon-btn" id="hhCopyBtn" title="Copy invite code">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+            </div>
+            <div class="hh-meta-text" id="hhMemberCount"></div>
+            <button class="hh-manage-btn" id="hhManageBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m17 4 4 4-4 4"/><path d="M3 8h18"/><path d="m7 20-4-4 4-4"/><path d="M21 16H3"/></svg>
+                Switch / Manage
+            </button>
         </div>
 
         <nav class="nav-list">
@@ -76,9 +95,20 @@
             </div>
             <div class="topbar-right">
                 <div class="user-info hidden" id="userInfo">
-                    <img class="user-avatar" id="userAvatar" src="" alt="">
                     <span class="user-name" id="userName"></span>
-                    <button class="btn-signout" id="signOutBtn">Sign Out</button>
+                    <div class="avatar-wrap">
+                        <button class="avatar-btn" id="avatarBtn" aria-label="Account menu">
+                            <img class="user-avatar" id="userAvatar" src="" alt="">
+                            <div class="avatar-fallback" id="avatarFallback"></div>
+                        </button>
+                        <div class="avatar-dropdown hidden" id="avatarDropdown">
+                            <div class="avatar-drop-name" id="avatarDropName"></div>
+                            <button class="btn-signout" id="signOutBtn">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <button class="btn-primary" id="quickAddBtn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -94,7 +124,9 @@
 
                 <div class="stats-grid">
                     <div class="stat-card stat-green">
-                        <div class="stat-icon">💵</div>
+                        <div class="stat-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </div>
                         <div class="stat-body">
                             <div class="stat-label">Total Income</div>
                             <div class="stat-value" id="d-income">$0.00</div>
@@ -102,7 +134,9 @@
                         </div>
                     </div>
                     <div class="stat-card stat-red">
-                        <div class="stat-icon">💸</div>
+                        <div class="stat-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+                        </div>
                         <div class="stat-body">
                             <div class="stat-label">Total Expenses</div>
                             <div class="stat-value" id="d-expense">$0.00</div>
@@ -110,7 +144,9 @@
                         </div>
                     </div>
                     <div class="stat-card stat-blue">
-                        <div class="stat-icon">💰</div>
+                        <div class="stat-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21H17"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+                        </div>
                         <div class="stat-body">
                             <div class="stat-label">Net Balance</div>
                             <div class="stat-value" id="d-balance">$0.00</div>
@@ -118,7 +154,9 @@
                         </div>
                     </div>
                     <div class="stat-card stat-gold">
-                        <div class="stat-icon">🏦</div>
+                        <div class="stat-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                        </div>
                         <div class="stat-body">
                             <div class="stat-label">Savings Rate</div>
                             <div class="stat-value" id="d-savings">—</div>
@@ -198,7 +236,10 @@
                 <div class="card mt-lg">
                     <div class="card-head">
                         <h3>Spending Categories</h3>
-                        <span class="text-muted" id="totalBudgetInfo">Total budgeted: $0</span>
+                        <div class="cat-head-right">
+                            <span class="text-muted" id="totalBudgetInfo">Total budgeted: $0</span>
+                            <button class="btn-carry hidden" id="carryFromPrevBtn" title="Copy categories and budgets from the previous month">↩ Carry from <span id="carryFromLabel"></span></button>
+                        </div>
                     </div>
                     <div class="cat-grid" id="catGrid"></div>
                     <div class="empty-state" id="catEmpty">No categories yet. Add one above to get started.</div>
@@ -292,13 +333,96 @@
 </div>
 
 <!-- Sidebar overlay (mobile) -->
+<!-- Bottom navigation (mobile only) -->
+<nav class="bottom-nav" id="bottomNav">
+    <button class="bnav-item active" data-section="dashboard">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Home</span>
+    </button>
+    <button class="bnav-item" data-section="budget">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span>Budget</span>
+    </button>
+    <div class="bnav-gap"></div>
+    <button class="bnav-item" data-section="transactions">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 4H3v16h18V4z"/><path d="M3 9h18M3 15h18M9 4v16"/></svg>
+        <span>History</span>
+    </button>
+    <button class="bnav-item" data-section="reports">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Reports</span>
+    </button>
+</nav>
+
+<!-- Floating action button (mobile only) -->
+<button class="fab" id="fabAddBtn" aria-label="Add transaction">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+<!-- Household setup overlay (shown after first login if user has no household) -->
+<div class="household-overlay hidden" id="householdOverlay">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div class="auth-logo">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h2 class="auth-title">Set Up Your Household</h2>
+            <p class="auth-sub">Budget data is shared in real time with all household members.</p>
+        </div>
+        <p class="auth-desc">Create a new household or join an existing one with an invite code. You can belong to multiple households.</p>
+        <div class="auth-tabs" style="margin-bottom:14px">
+            <button class="auth-tab active" data-hhtab="create">Create New</button>
+            <button class="auth-tab" data-hhtab="join">Join Existing</button>
+        </div>
+        <div id="hhCreateForm">
+            <input type="text" id="hhNewName" placeholder="Household name (e.g. Smith Family)" class="inp w-full" autocomplete="off">
+            <button class="btn-primary btn-block mt-sm" id="hhCreateBtn">Create Household</button>
+        </div>
+        <div id="hhJoinForm" class="hidden">
+            <input type="text" id="hhJoinCode" placeholder="Enter 6-character invite code" class="inp w-full hh-code-inp" maxlength="8" autocomplete="off">
+            <button class="btn-primary btn-block mt-sm" id="hhJoinBtn">Join Household</button>
+        </div>
+        <div class="auth-error hidden" id="hhError"></div>
+    </div>
+</div>
+
+<!-- Household manager panel -->
+<div class="hh-panel-overlay hidden" id="hhPanelOverlay">
+    <div class="hh-panel">
+        <div class="hh-panel-head">
+            <h3>Your Households</h3>
+            <button class="hh-panel-close" id="hhPanelClose" aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="hh-list" id="hhList"></div>
+        <div class="hh-panel-section">
+            <div class="hh-panel-section-title">Create a new household</div>
+            <div class="row-inline">
+                <input type="text" id="hhNewNameInline" placeholder="Household name" class="inp flex-1" autocomplete="off">
+                <button class="btn-primary" id="hhCreateInlineBtn">Create</button>
+            </div>
+        </div>
+        <div class="hh-panel-section">
+            <div class="hh-panel-section-title">Join with invite code</div>
+            <div class="row-inline">
+                <input type="text" id="hhJoinCodeInline" placeholder="6-character code" class="inp flex-1 hh-code-inp" maxlength="8" autocomplete="off">
+                <button class="btn-primary" id="hhJoinInlineBtn">Join</button>
+            </div>
+        </div>
+        <div class="auth-error hidden" id="hhPanelError" style="margin:0 12px 12px"></div>
+    </div>
+</div>
+
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <!-- Auth Overlay -->
 <div class="auth-overlay hidden" id="authOverlay">
     <div class="auth-card">
         <div class="auth-brand">
-            <div class="auth-logo">🏠</div>
+            <div class="auth-logo">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
             <h2 class="auth-title">HouseBudget</h2>
             <p class="auth-sub">Family Finance Tracker</p>
         </div>
@@ -308,19 +432,6 @@
             <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Continue with Google
         </button>
-
-        <div class="auth-divider"><span>or use email</span></div>
-
-        <div class="auth-tabs">
-            <button class="auth-tab active" data-tab="signin">Sign In</button>
-            <button class="auth-tab" data-tab="register">Create Account</button>
-        </div>
-
-        <form id="emailAuthForm" class="auth-email-form" novalidate>
-            <input type="email" id="authEmail" placeholder="Email address" class="inp" autocomplete="email">
-            <input type="password" id="authPassword" placeholder="Password (min. 6 characters)" class="inp" autocomplete="current-password">
-            <button type="submit" class="btn-primary btn-block" id="emailAuthBtn">Sign In</button>
-        </form>
 
         <div class="auth-error hidden" id="authError"></div>
 
