@@ -219,6 +219,17 @@ body {
     padding: 6px;
     border-radius: 8px;
     transition: background var(--transition);
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.menu-toggle .menu-toggle-label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    color: var(--text-muted);
+    line-height: 1;
+    display: none;
 }
 .menu-toggle:hover { background: var(--bg); }
 .page-title { font-size: 1.25rem; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
@@ -1065,8 +1076,11 @@ body {
     .bottom-nav { display: flex; }
     .fab         { display: flex; }
 
+    /* Hamburger re-enabled on mobile to access sidebar (month + household) */
+    .menu-toggle { display: flex; }
+    .menu-toggle .menu-toggle-label { display: block; }
+
     /* Hide desktop-only chrome */
-    .menu-toggle  { display: none !important; }
     .page-subtitle { display: none; }
     #quickAddBtn  { display: none; }
 
