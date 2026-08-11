@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HouseBudget — Family Finance Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <!-- Firebase SDKs (compat v10) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+<div class="app">
+
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">🏠</div>
+            <div>
+                <div class="brand-name">HouseBudget</div>
+                <div class="brand-tagline">Family Finance Tracker</div>
+            </div>
+        </div>
+
+        <div class="month-box">
+            <div class="month-box-label">📅 Active Month</div>
+            <input type="month" id="activeMonth" class="month-picker">
+        </div>
+
+        <nav class="nav-list">
+            <button class="nav-item active" data-section="dashboard">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Dashboard
+            </button>
+            <button class="nav-item" data-section="budget">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                Budget Setup
+            </button>
+            <button class="nav-item" data-section="transactions">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 4H3v16h18V4z"/><path d="M3 9h18M3 15h18M9 4v16"/></svg>
+                Transactions
+            </button>
+            <button class="nav-item" data-section="reports">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Reports
+            </button>
+        </nav>
+
+        <div class="sidebar-health">
+            <div class="health-title">Budget Health</div>
+            <div class="health-track">
+                <div class="health-fill" id="healthFill" style="width:0%"></div>
+            </div>
+            <div class="health-stats">
+                <span id="healthSpent">$0 spent</span>
+                <span id="healthPct">0%</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ========== MAIN ========== -->
+    <div class="main-shell">
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="menu-toggle" id="menuToggle" aria-label="Toggle sidebar">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <div class="page-heading">
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                    <p class="page-subtitle" id="pageSubtitle"></p>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <div class="user-info hidden" id="userInfo">
+                    <img class="user-avatar" id="userAvatar" src="" alt="">
+                    <span class="user-name" id="userName"></span>
+                    <button class="btn-signout" id="signOutBtn">Sign Out</button>
+                </div>
+                <button class="btn-primary" id="quickAddBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Transaction
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- ============ DASHBOARD ============ -->
+            <section class="page active" id="page-dashboard">
+
+                <div class="stats-grid">
+                    <div class="stat-card stat-green">
+                        <div class="stat-icon">💵</div>
+                        <div class="stat-body">
+                            <div class="stat-label">Total Income</div>
+                            <div class="stat-value" id="d-income">$0.00</div>
+                            <div class="stat-note" id="d-income-note">0 transactions</div>
+                        </div>
+                    </div>
+                    <div class="stat-card stat-red">
+                        <div class="stat-icon">💸</div>
+                        <div class="stat-body">
+                            <div class="stat-label">Total Expenses</div>
+                            <div class="stat-value" id="d-expense">$0.00</div>
+                            <div class="stat-note" id="d-expense-note">0 transactions</div>
+                        </div>
+                    </div>
+                    <div class="stat-card stat-blue">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-body">
+                            <div class="stat-label">Net Balance</div>
+                            <div class="stat-value" id="d-balance">$0.00</div>
+                            <div class="stat-note" id="d-balance-note">income − expenses</div>
+                        </div>
+                    </div>
+                    <div class="stat-card stat-gold">
+                        <div class="stat-icon">🏦</div>
+                        <div class="stat-body">
+                            <div class="stat-label">Savings Rate</div>
+                            <div class="stat-value" id="d-savings">—</div>
+                            <div class="stat-note" id="d-savings-note">of income</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row-2col">
+                    <div class="card">
+                        <div class="card-head">
+                            <h3>Budget vs Actual Spending</h3>
+                            <span class="badge hidden" id="overBudgetBadge"></span>
+                        </div>
+                        <div id="budgetBars" class="budget-bars"></div>
+                        <div class="empty-state" id="budgetBarsEmpty">Set up your categories in Budget Setup to track progress here.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head">
+                            <h3>Expense Breakdown</h3>
+                        </div>
+                        <div class="donut-wrap">
+                            <canvas id="donutChart" width="220" height="220"></canvas>
+                            <div class="donut-overlay">
+                                <div class="donut-total" id="donutTotal">$0</div>
+                                <div class="donut-label">Total Spent</div>
+                            </div>
+                        </div>
+                        <div class="donut-legend" id="donutLegend"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Recent Transactions</h3>
+                        <button class="link-btn" data-goto="transactions">View all →</button>
+                    </div>
+                    <div id="recentTxns" class="txn-list"></div>
+                    <div class="empty-state" id="recentEmpty">No transactions yet. Click <strong>Add Transaction</strong> to get started!</div>
+                </div>
+
+            </section>
+
+            <!-- ============ BUDGET SETUP ============ -->
+            <section class="page" id="page-budget">
+
+                <div class="setup-2col">
+                    <div class="card">
+                        <h3>Monthly Income Target</h3>
+                        <p class="text-muted mt-sm">Set the total income you expect to receive this month.</p>
+                        <div class="row-inline mt-md">
+                            <div class="prefix-input flex-1">
+                                <span class="prefix">$</span>
+                                <input type="number" id="incomeTargetInput" placeholder="e.g. 5000" min="0" step="0.01" class="inp">
+                            </div>
+                            <button class="btn-primary" id="saveIncomeBtn">Save</button>
+                        </div>
+                        <div class="income-saved-msg" id="incomeSavedMsg"></div>
+                    </div>
+                    <div class="card">
+                        <h3>Add New Category</h3>
+                        <p class="text-muted mt-sm">Create a spending category with a monthly budget limit.</p>
+                        <div class="add-cat-fields mt-md">
+                            <input type="text" id="catNameInp" placeholder="Category name (e.g. Groceries)" class="inp w-full">
+                            <div class="row-inline mt-sm">
+                                <div class="prefix-input flex-1">
+                                    <span class="prefix">$</span>
+                                    <input type="number" id="catBudgetInp" placeholder="Budget amount" min="0" step="0.01" class="inp">
+                                </div>
+                                <input type="color" id="catColorInp" value="#6366f1" class="color-picker" title="Pick category color">
+                                <button class="btn-primary" id="addCatBtn">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-lg">
+                    <div class="card-head">
+                        <h3>Spending Categories</h3>
+                        <span class="text-muted" id="totalBudgetInfo">Total budgeted: $0</span>
+                    </div>
+                    <div class="cat-grid" id="catGrid"></div>
+                    <div class="empty-state" id="catEmpty">No categories yet. Add one above to get started.</div>
+                </div>
+
+            </section>
+
+            <!-- ============ TRANSACTIONS ============ -->
+            <section class="page" id="page-transactions">
+
+                <div class="card">
+                    <h3>Add Transaction</h3>
+                    <form id="txnForm" class="txn-form" novalidate>
+                        <div class="type-toggle">
+                            <button type="button" class="type-btn active" data-type="expense">💸 Expense</button>
+                            <button type="button" class="type-btn" data-type="income">💵 Income</button>
+                        </div>
+                        <div class="txn-grid">
+                            <div class="form-grp">
+                                <label>Amount *</label>
+                                <div class="prefix-input">
+                                    <span class="prefix">$</span>
+                                    <input type="number" id="txnAmt" placeholder="0.00" min="0.01" step="0.01" class="inp" required>
+                                </div>
+                            </div>
+                            <div class="form-grp" id="txnCatWrap">
+                                <label>Category *</label>
+                                <select id="txnCat" class="inp"></select>
+                            </div>
+                            <div class="form-grp">
+                                <label>Date *</label>
+                                <input type="date" id="txnDate" class="inp" required>
+                            </div>
+                            <div class="form-grp">
+                                <label>Description <span class="text-muted">(optional)</span></label>
+                                <input type="text" id="txnDesc" placeholder="What was this for?" class="inp">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block">Add Transaction</button>
+                    </form>
+                </div>
+
+                <div class="card mt-lg">
+                    <div class="card-head">
+                        <h3>Transaction History</h3>
+                        <div class="filters">
+                            <select id="filterType" class="inp-sm">
+                                <option value="all">All Types</option>
+                                <option value="income">Income</option>
+                                <option value="expense">Expenses</option>
+                            </select>
+                            <select id="filterCat" class="inp-sm">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="txnList" class="txn-list"></div>
+                    <div class="empty-state" id="txnEmpty">No transactions match your filters.</div>
+                </div>
+
+            </section>
+
+            <!-- ============ REPORTS ============ -->
+            <section class="page" id="page-reports">
+
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Income vs Expenses</h3>
+                        <span class="text-muted">Last 6 months</span>
+                    </div>
+                    <div class="chart-tall">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card mt-lg">
+                    <div class="card-head">
+                        <h3>Budget vs Spending by Category</h3>
+                        <span class="text-muted" id="reportMonthLabel"></span>
+                    </div>
+                    <div class="chart-tall" id="catChartWrap">
+                        <canvas id="catBarChart"></canvas>
+                    </div>
+                    <div class="empty-state hidden" id="catBarEmpty">Add transactions to see category spending here.</div>
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- Sidebar overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Auth Overlay -->
+<div class="auth-overlay hidden" id="authOverlay">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div class="auth-logo">🏠</div>
+            <h2 class="auth-title">HouseBudget</h2>
+            <p class="auth-sub">Family Finance Tracker</p>
+        </div>
+        <p class="auth-desc">Sign in to sync your family budget across all devices in real time.</p>
+
+        <button class="btn-google" id="googleSignInBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Continue with Google
+        </button>
+
+        <div class="auth-divider"><span>or use email</span></div>
+
+        <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="signin">Sign In</button>
+            <button class="auth-tab" data-tab="register">Create Account</button>
+        </div>
+
+        <form id="emailAuthForm" class="auth-email-form" novalidate>
+            <input type="email" id="authEmail" placeholder="Email address" class="inp" autocomplete="email">
+            <input type="password" id="authPassword" placeholder="Password (min. 6 characters)" class="inp" autocomplete="current-password">
+            <button type="submit" class="btn-primary btn-block" id="emailAuthBtn">Sign In</button>
+        </form>
+
+        <div class="auth-error hidden" id="authError"></div>
+
+        <div class="auth-setup-note" id="authSetupNote">
+            <span>⚙️</span>
+            <span>Firebase not configured yet. Open <code>firebase-config.js</code> and add your project credentials to enable cloud sync.</span>
+        </div>
+    </div>
+</div>
+
+<!-- Loading overlay (shown while fetching Firestore data) -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="spinner"></div>
+    <p>Loading your budget data…</p>
+</div>
+
+<!-- Toast notifications -->
+<div id="toastContainer" class="toast-container"></div>
+
+</body>
+</html>
