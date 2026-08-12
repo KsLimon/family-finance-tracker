@@ -20,17 +20,28 @@
  *    service cloud.firestore {
  *      match /databases/{database}/documents {
  *
- *        // Each user's profile (stores their household list)
+ *        // Each user's profile
  *        match /users/{userId} {
  *          allow read, write: if request.auth != null
  *                             && request.auth.uid == userId;
  *        }
  *
- *        // Household budget data — any member can read/write
  *        match /households/{householdId} {
- *          allow read, update: if request.auth != null
- *                              && request.auth.uid in resource.data.members;
+ *          // Any signed-in user can read (required to find household by invite code)
+ *          allow read: if request.auth != null;
+ *          // Any signed-in user can create a new household
  *          allow create: if request.auth != null;
+ *          // Existing members can update freely;
+ *          // non-members may only add themselves (join via invite code)
+ *          allow update: if request.auth != null
+ *            && (request.auth.uid in resource.data.members
+ *                || (request.auth.uid in request.resource.data.members
+ *                    && request.resource.data.members.hasAll(resource.data.members)
+ *                    && request.resource.data.members.size()
+ *                       == resource.data.members.size() + 1));
+ *          // Only the creator can delete a household
+ *          allow delete: if request.auth != null
+ *                        && request.auth.uid == resource.data.createdBy;
  *
  *          match /months/{month} {
  *            allow read, write: if request.auth != null

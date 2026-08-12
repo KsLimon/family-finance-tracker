@@ -829,7 +829,14 @@ async function joinHousehold(code) {
         households:        firebase.firestore.FieldValue.arrayUnion(hhDoc.id),
         activeHouseholdId: hhDoc.id,
     }, { merge: true });
-    await batch.commit();
+    try {
+        await batch.commit();
+    } catch (e) {
+        if (e.code === 'permission-denied') {
+            throw new Error('Permission denied. Your Firestore security rules need to be updated. Copy the new rules from firebase-config.js into your Firebase Console → Firestore → Rules.');
+        }
+        throw e;
+    }
     const hh = { id: hhDoc.id, ...hhDoc.data(), members: [...hhDoc.data().members, currentUser.uid] };
     currentHouseholdId   = hhDoc.id;
     currentHouseholdData = hh;
