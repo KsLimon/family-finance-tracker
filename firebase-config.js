@@ -49,6 +49,13 @@
  *                 get(/databases/$(database)/documents/households/$(householdId))
  *                   .data.members;
  *          }
+ *          // Bazar list and Watch list (household-wide shared lists)
+ *          match /lists/{listId} {
+ *            allow read, write: if request.auth != null
+ *              && request.auth.uid in
+ *                 get(/databases/$(database)/documents/households/$(householdId))
+ *                   .data.members;
+ *          }
  *        }
  *      }
  *    }

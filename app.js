@@ -57,6 +57,18 @@ let userHouseholds       = [];
 let eventsRegistered     = false;
 
 /* ============================================================
+   BAZAR / WATCH LIST STATE
+   ============================================================ */
+let bazarItems       = [];
+let watchItems       = [];
+let bazarUnsubscribe = null;
+let watchUnsubscribe = null;
+let watchType        = 'movie';
+
+/* Reused inline checkmark SVG */
+const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+/* ============================================================
    PERSISTENCE
    ============================================================ */
 function saveState() {
@@ -192,6 +204,8 @@ function navigate(section) {
         budget:       'Budget Setup',
         transactions: 'Transactions',
         reports:      'Reports',
+        bazar:        'Bazar List',
+        watchlist:    'Watch List',
     };
     document.getElementById('pageTitle').textContent = labels[section] || section;
     document.getElementById('pageSubtitle').textContent = monthLabel(state.activeMonth);
@@ -203,6 +217,8 @@ function navigate(section) {
     if (section === 'budget')       renderBudget();
     if (section === 'transactions') renderTransactions();
     if (section === 'reports')      renderReports();
+    if (section === 'bazar')        renderBazar();
+    if (section === 'watchlist')    renderWatchList();
 }
 
 /* ============================================================
@@ -872,6 +888,8 @@ async function switchHousehold(id) {
     hideLoading();
     updateHouseholdUI();
     subscribeToActiveMonth();
+    subscribeToBazar();
+    subscribeToWatch();
     navigate(currentSection);
 }
 
@@ -957,10 +975,13 @@ async function finishAppStart() {
     try {
         const loaded = await loadAllFromFirestore();
         if (!loaded) loadState();
-    } catch (_) { loadState(); }
+        await loadListsFromFirestore();
+    } catch (_) { loadState(); bazarItems = []; watchItems = []; }
     hideLoading();
     updateHouseholdUI();
     subscribeToActiveMonth();
+    subscribeToBazar();
+    subscribeToWatch();
     setupApp();
 }
 
@@ -1069,9 +1090,152 @@ async function setupAuthListener() {
             currentHouseholdData = null;
             clearUserUI();
             if (firestoreUnsubscribeMonth) { firestoreUnsubscribeMonth(); firestoreUnsubscribeMonth = null; }
+            if (bazarUnsubscribe) { bazarUnsubscribe(); bazarUnsubscribe = null; }
+            if (watchUnsubscribe) { watchUnsubscribe(); watchUnsubscribe = null; }
             showAuth();
         }
     });
+}
+
+/* ============================================================
+   BAZAR LIST – FIRESTORE + RENDER
+   ============================================================ */
+async function loadListsFromFirestore() {
+    if (!db || !currentHouseholdId) {
+        try { bazarItems = JSON.parse(localStorage.getItem('housebudget_bazar') || '[]'); } catch(_) { bazarItems = []; }
+        try { watchItems = JSON.parse(localStorage.getItem('housebudget_watch') || '[]'); } catch(_) { watchItems = []; }
+        return;
+    }
+    try {
+        const [bDoc, wDoc] = await Promise.all([
+            db.collection('households').doc(currentHouseholdId).collection('lists').doc('bazar').get(),
+            db.collection('households').doc(currentHouseholdId).collection('lists').doc('watchlist').get(),
+        ]);
+        bazarItems = bDoc.exists ? (bDoc.data().items || []) : [];
+        watchItems = wDoc.exists ? (wDoc.data().items || []) : [];
+    } catch(e) { bazarItems = []; watchItems = []; }
+}
+
+function subscribeToBazar() {
+    if (bazarUnsubscribe) bazarUnsubscribe();
+    bazarUnsubscribe = null;
+    if (!db || !currentHouseholdId) return;
+    bazarUnsubscribe = db.collection('households').doc(currentHouseholdId)
+        .collection('lists').doc('bazar')
+        .onSnapshot(doc => {
+            bazarItems = doc.exists ? (doc.data().items || []) : [];
+            if (currentSection === 'bazar') renderBazar();
+        }, err => console.warn('Bazar snapshot:', err.message));
+}
+
+function subscribeToWatch() {
+    if (watchUnsubscribe) watchUnsubscribe();
+    watchUnsubscribe = null;
+    if (!db || !currentHouseholdId) return;
+    watchUnsubscribe = db.collection('households').doc(currentHouseholdId)
+        .collection('lists').doc('watchlist')
+        .onSnapshot(doc => {
+            watchItems = doc.exists ? (doc.data().items || []) : [];
+            if (currentSection === 'watchlist') renderWatchList();
+        }, err => console.warn('Watch snapshot:', err.message));
+}
+
+function saveBazar() {
+    try { localStorage.setItem('housebudget_bazar', JSON.stringify(bazarItems)); } catch(_) {}
+    if (db && currentHouseholdId)
+        db.collection('households').doc(currentHouseholdId)
+            .collection('lists').doc('bazar').set({ items: bazarItems })
+            .catch(e => console.error('Bazar save:', e));
+}
+
+function saveWatch() {
+    try { localStorage.setItem('housebudget_watch', JSON.stringify(watchItems)); } catch(_) {}
+    if (db && currentHouseholdId)
+        db.collection('households').doc(currentHouseholdId)
+            .collection('lists').doc('watchlist').set({ items: watchItems })
+            .catch(e => console.error('Watch save:', e));
+}
+
+function renderBazar() {
+    const sorted   = [...bazarItems].sort((a, b) => a.done - b.done);
+    const total    = sorted.length;
+    const bought   = sorted.filter(i => i.done).length;
+    const listEl   = document.getElementById('bazarListEl');
+    const emptyEl  = document.getElementById('bazarEmpty');
+    const progEl   = document.getElementById('bazarProgress');
+
+    progEl.textContent = total > 0 ? `${bought} of ${total} bought` : '';
+
+    if (total === 0) { listEl.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+
+    listEl.innerHTML = sorted.map(item => `
+        <div class="checklist-item ${item.done ? 'done' : ''}">
+            <button class="checklist-cb" data-toggle="${item.id}" title="${item.done ? 'Unmark' : 'Mark bought'}">${item.done ? CHECK_SVG : ''}</button>
+            <span class="checklist-name">${escHtml(item.name)}</span>
+            <button class="txn-del" data-del-bazar="${item.id}" aria-label="Remove">&#10005;</button>
+        </div>`).join('');
+
+    listEl.querySelectorAll('[data-toggle]').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const it = bazarItems.find(i => i.id === btn.dataset.toggle);
+            if (it) { it.done = !it.done; saveBazar(); renderBazar(); }
+        }));
+    listEl.querySelectorAll('[data-del-bazar]').forEach(btn =>
+        btn.addEventListener('click', () => {
+            bazarItems = bazarItems.filter(i => i.id !== btn.dataset.delBazar);
+            saveBazar(); renderBazar();
+        }));
+}
+
+/* ============================================================
+   WATCH LIST – RENDER
+   ============================================================ */
+function renderWatchList() {
+    const filter  = document.getElementById('watchFilter')?.value || 'all';
+    let items = [...watchItems].sort((a, b) => a.done - b.done);
+    if (filter === 'unwatched') items = items.filter(i => !i.done);
+    if (filter === 'watched')   items = items.filter(i =>  i.done);
+
+    const listEl  = document.getElementById('watchListEl');
+    const emptyEl = document.getElementById('watchEmpty');
+
+    if (items.length === 0) { listEl.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+
+    listEl.innerHTML = items.map(item => `
+        <div class="watch-item ${item.done ? 'done' : ''}">
+            <button class="checklist-cb" data-toggle-watch="${item.id}" title="${item.done ? 'Unmark' : 'Mark watched'}">${item.done ? CHECK_SVG : ''}</button>
+            <div class="watch-info">
+                <div class="watch-row1">
+                    <span class="watch-title">${escHtml(item.title)}</span>
+                    <span class="watch-badge ${item.type}">${item.type === 'movie' ? 'Movie' : 'Series'}</span>
+                </div>
+                <div class="watch-stars">
+                    ${[1,2,3,4,5].map(n =>
+                        `<button class="star ${n <= (item.rating||0) ? 'filled' : ''}" data-star="${item.id}" data-n="${n}" title="${n} star${n>1?'s':''}">&#9733;</button>`
+                    ).join('')}
+                </div>
+            </div>
+            <button class="txn-del" data-del-watch="${item.id}" aria-label="Remove">&#10005;</button>
+        </div>`).join('');
+
+    listEl.querySelectorAll('[data-toggle-watch]').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const it = watchItems.find(i => i.id === btn.dataset.toggleWatch);
+            if (it) { it.done = !it.done; saveWatch(); renderWatchList(); }
+        }));
+    listEl.querySelectorAll('[data-star]').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const it = watchItems.find(i => i.id === btn.dataset.star);
+            const n  = parseInt(btn.dataset.n);
+            if (it) { it.rating = it.rating === n ? 0 : n; saveWatch(); renderWatchList(); }
+        }));
+    listEl.querySelectorAll('[data-del-watch]').forEach(btn =>
+        btn.addEventListener('click', () => {
+            watchItems = watchItems.filter(i => i.id !== btn.dataset.delWatch);
+            saveWatch(); renderWatchList();
+        }));
 }
 
 /* ============================================================
@@ -1220,6 +1384,41 @@ function setupApp() {
     /* Filters */
     document.getElementById('filterType').addEventListener('change', applyFilters);
     document.getElementById('filterCat').addEventListener('change',  applyFilters);
+
+    /* ===== BAZAR LIST ===== */
+    document.getElementById('bazarForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const name = document.getElementById('bazarInput').value.trim();
+        if (!name) return;
+        bazarItems.push({ id: uid(), name, done: false, addedBy: currentUser?.displayName || 'You', addedAt: Date.now() });
+        saveBazar();
+        document.getElementById('bazarInput').value = '';
+        renderBazar();
+    });
+    document.getElementById('clearBazarDone').addEventListener('click', () => {
+        bazarItems = bazarItems.filter(i => !i.done);
+        saveBazar(); renderBazar();
+    });
+
+    /* ===== WATCH LIST ===== */
+    document.querySelectorAll('[data-watchtype]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-watchtype]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            watchType = btn.dataset.watchtype;
+        });
+    });
+    document.getElementById('watchForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const title = document.getElementById('watchTitleInp').value.trim();
+        if (!title) return;
+        watchItems.push({ id: uid(), title, type: watchType, done: false, rating: 0, addedBy: currentUser?.displayName || 'You', addedAt: Date.now() });
+        saveWatch();
+        document.getElementById('watchTitleInp').value = '';
+        renderWatchList();
+        toast(`“${title}” added to watch list!`);
+    });
+    document.getElementById('watchFilter').addEventListener('change', renderWatchList);
 
     /* ===== INITIAL RENDER ===== */
     if (currentHouseholdId || !auth) navigate('dashboard');

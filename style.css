@@ -983,6 +983,58 @@ body {
 .hh-panel-section-title { font-size: 0.73rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
 
 /* ============================================================
+   BAZAR LIST
+   ============================================================ */
+.checklist { display: flex; flex-direction: column; }
+.checklist-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 8px; border-radius: var(--radius-xs);
+    transition: background var(--transition);
+}
+.checklist-item:hover { background: #f8fafc; }
+.checklist-cb {
+    width: 24px; height: 24px; border-radius: 7px;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; cursor: pointer; background: #fff; color: transparent;
+    transition: all var(--transition);
+}
+.checklist-cb:hover { border-color: var(--green); }
+.checklist-item.done .checklist-cb { background: var(--green); border-color: var(--green); color: #fff; }
+.checklist-name { flex: 1; font-size: 0.9rem; font-weight: 500; color: var(--text); }
+.checklist-item.done .checklist-name { text-decoration: line-through; color: var(--text-muted); }
+
+/* ============================================================
+   WATCH LIST
+   ============================================================ */
+.watch-list { display: flex; flex-direction: column; }
+.watch-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 8px; border-radius: var(--radius-xs);
+    transition: background var(--transition);
+}
+.watch-item:hover { background: #f8fafc; }
+.watch-info { flex: 1; min-width: 0; }
+.watch-row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.watch-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.watch-item.done .watch-title { text-decoration: line-through; color: var(--text-muted); }
+.watch-badge {
+    font-size: 0.68rem; font-weight: 800; padding: 2px 8px;
+    border-radius: 99px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+}
+.watch-badge.movie  { background: var(--primary-light); color: var(--primary); }
+.watch-badge.series { background: var(--amber-light);   color: var(--amber); }
+.watch-stars { display: flex; gap: 1px; }
+.star {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.2rem; line-height: 1; color: #e2e8f0;
+    transition: color var(--transition), transform var(--transition);
+    padding: 0 1px;
+}
+.star.filled { color: #f59e0b; }
+.star:hover, .star:focus { color: #f59e0b; transform: scale(1.25); outline: none; }
+
+/* ============================================================
    AVATAR DROPDOWN
    ============================================================ */
 .avatar-wrap { position: relative; flex-shrink: 0; }
@@ -1055,7 +1107,9 @@ body {
    ============================================================ */
 .fab {
     display: none;
-    position: fixed; bottom: 74px; left: 50%; transform: translateX(-50%);
+    position: fixed;
+    bottom: 78px;
+    right: 20px;
     width: 58px; height: 58px; border-radius: 50%;
     background: var(--primary); color: #fff;
     border: none; cursor: pointer; z-index: 201;
@@ -1063,8 +1117,8 @@ body {
     box-shadow: 0 4px 20px rgba(79,70,229,0.5);
     transition: transform var(--transition), box-shadow var(--transition);
 }
-.fab:hover  { transform: translateX(-50%) scale(1.08); box-shadow: 0 6px 28px rgba(79,70,229,0.6); }
-.fab:active { transform: translateX(-50%) scale(0.95); }
+.fab:hover  { transform: scale(1.08); box-shadow: 0 6px 28px rgba(79,70,229,0.6); }
+.fab:active { transform: scale(0.95); }
 
 /* Touch devices can't hover — always show delete buttons */
 @media (hover: none) {
